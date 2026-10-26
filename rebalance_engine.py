@@ -1,4 +1,7 @@
-<!-- ... existing code ... -->
+import os
+import sys
+import logging
+from typing import Dict, List
 from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
@@ -10,11 +13,31 @@ from telegram_notifier import TelegramNotifier
 LOG_FORMAT = "%(asctime)s - %(levelname)s - %(message)s"
 logging.basicConfig(level=logging.INFO, format=LOG_FORMAT)
 logger = logging.getLogger("DividendRebalancer")
-<!-- ... existing code ... -->
+
+# Target Monthly Dividend Stocks (Weights sum to 1.0)
+DEFAULT_PORTFOLIO_TARGETS = {
+    "O": 0.25,     # Realty Income Corp (REIT)
+    "ADC": 0.20,   # Agree Realty Corp (REIT)
+    "MAIN": 0.20,  # Main Street Capital (BDC)
+    "STAG": 0.20,  # STAG Industrial (REIT)
+    "LTC": 0.15    # LTC Properties (REIT)
+}
+
+MIN_BUDGET_USD = 5.0
+
+class AutomatedRebalancer:
+    def __init__(self, api_key: str, secret_key: str, paper_mode: bool = True):
+        if not api_key or not secret_key:
+            raise ValueError("Alpaca credentials must be provided.")
+        self.trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=paper_mode)
+
+    def verify_account(self) -> float:
+        account = self.trading_client.get_account()
+        if account.trading_blocked or account.account_blocked:
+            raise PermissionError("Alpaca account is currently restricted.")
+        return float(account.buying_power)
+
     def execute_fractional_allocations(self, budget_usd: float, targets: Dict[str, float]) -> List[dict]:
-        """
-        Calculates and submits fractional dollar-amount market orders for targeted stocks.
-        """
         available_cash = self.verify_account()
         
         if budget_usd > available_cash:
@@ -24,7 +47,6 @@ logger = logging.getLogger("DividendRebalancer")
         if budget_usd < MIN_BUDGET_USD:
             raise ValueError(f"Budget of ${budget_usd:.2f} is below minimum allowed threshold of ${MIN_BUDGET_USD:.2f}.")
 
-        # Normalize target weights to ensure total equals 1.0
         weight_sum = sum(targets.values())
         normalized_targets = {k: v / weight_sum for k, v in targets.items()}
 
@@ -68,16 +90,16 @@ logger = logging.getLogger("DividendRebalancer")
                     "error": str(e)
                 })
 
-        # Send Telegram notification if configured
-        notifier = TelegramNotifier()
-        report_msg = notifier.format_execution_report(budget_usd, execution_results, self.trading_client._paper)
-        notifier.send_message(report_msg)
+        # Send Telegram notification if credentials are configured
+        try:
+            notifier = TelegramNotifier()
+            report_msg = notifier.format_execution_report(budget_usd, execution_results, self.trading_client._paper)
+            notifier.send_message(report_msg)
+        except Exception as notify_err:
+            logger.error(f"Telegram notification dispatch error: {notify_err}")
 
         return execution_results
 
-# -------------------------------------------------------------------
-# CLI ENTRYPOINT FOR GITHUB ACTIONS / AUTOMATION RUNNERS
-# -------------------------------------------------------------------
 if __name__ == "__main__":
     API_KEY = os.getenv("ALPACA_API_KEY")
     SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
