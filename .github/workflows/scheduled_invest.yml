@@ -2,33 +2,47 @@ name: Monthly Dividend Auto-Investor Workflow
 
 on:
   schedule:
-    # Runs at 14:00 UTC on the 1st day of every month
+    # Runs at 14:00 UTC (9:00 AM EST) on the 1st day of every month
     - cron: '0 14 1 * *'
-  workflow_dispatch: # Allows manual trigger from GitHub UI
+  workflow_dispatch: # Allows manual trigger from GitHub Actions UI
 
 jobs:
   execute-monthly-rebalance:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Enables writing timestamped trade logs back to master
 
     steps:
-      - name: Check out Repository Code
-        uses: actions/checkout@v3
+      - name: 1. Check out Repository Code
+        uses: actions/checkout@v4
 
-      - name: Set up Python Environment
-        uses: actions/setup-python@v4
+      - name: 2. Set up Python Environment
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
+          cache: 'pip'
 
-      - name: Install Python Dependencies
+      - name: 3. Install Quantitative Python Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Programmatic Rebalancer Engine
+      - name: 4. Run Programmatic Rebalancer Engine
         env:
+          PYTHONPATH: .
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
           ALPACA_PAPER: "True"
           MONTHLY_BUDGET_USD: "100.0"
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python rebalance_engine.py
+
+      - name: 5. Commit & Push Updated Trade Audit Log
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git add US_DIVIDEND_TRADE_AUDIT.csv || true
+          git commit -m "auto: append timestamped monthly US dividend trade audit log" || true
+          git push
