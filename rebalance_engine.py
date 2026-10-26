@@ -25,8 +25,17 @@ DEFAULT_PORTFOLIO_TARGETS = {
 
 MIN_BUDGET_USD = 5.0
 
+def sanitize(val: str) -> str:
+    """Strips leading/trailing whitespace, newlines, and quotes from secret values."""
+    if not val:
+        return ""
+    return val.strip().strip("'").strip('"')
+
 class AutomatedRebalancer:
     def __init__(self, api_key: str, secret_key: str, paper_mode: bool = True):
+        api_key = sanitize(api_key)
+        secret_key = sanitize(secret_key)
+        
         if not api_key or not secret_key:
             raise ValueError("Alpaca credentials must be provided.")
         self.trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=paper_mode)
@@ -90,9 +99,11 @@ class AutomatedRebalancer:
                     "error": str(e)
                 })
 
-        # Send Telegram notification if credentials are configured
+        # Send Telegram notification
         try:
-            notifier = TelegramNotifier()
+            bot_token = sanitize(os.getenv("TELEGRAM_BOT_TOKEN"))
+            chat_id = sanitize(os.getenv("TELEGRAM_CHAT_ID"))
+            notifier = TelegramNotifier(bot_token=bot_token, chat_id=chat_id)
             report_msg = notifier.format_execution_report(budget_usd, execution_results, self.trading_client._paper)
             notifier.send_message(report_msg)
         except Exception as notify_err:
@@ -101,8 +112,8 @@ class AutomatedRebalancer:
         return execution_results
 
 if __name__ == "__main__":
-    API_KEY = os.getenv("ALPACA_API_KEY")
-    SECRET_KEY = os.getenv("ALPACA_SECRET_KEY")
+    API_KEY = sanitize(os.getenv("ALPACA_API_KEY"))
+    SECRET_KEY = sanitize(os.getenv("ALPACA_SECRET_KEY"))
     PAPER_ENV = os.getenv("ALPACA_PAPER", "True").lower() == "true"
     INVEST_BUDGET = float(os.getenv("MONTHLY_BUDGET_USD", "100.0"))
 
