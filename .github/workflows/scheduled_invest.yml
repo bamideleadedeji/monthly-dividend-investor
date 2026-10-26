@@ -1,0 +1,34 @@
+name: Monthly Dividend Auto-Investor Workflow
+
+on:
+  schedule:
+    # Runs at 14:00 UTC on the 1st day of every month
+    - cron: '0 14 1 * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  execute-monthly-rebalance:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out Repository Code
+        uses: actions/checkout@v3
+
+      - name: Set up Python Environment
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run Programmatic Rebalancer Engine
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_SECRET_KEY: ${{ secrets.ALPACA_SECRET_KEY }}
+          ALPACA_PAPER: "True"
+          MONTHLY_BUDGET_USD: "100.0"
+        run: |
+          python rebalance_engine.py
