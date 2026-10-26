@@ -4,9 +4,9 @@ US Monthly Dividend Engine — Alpaca Rebalance Router & Audit Engine
 File: rebalance_engine.py
 ===============================================================================
 Description:
-    Handles fractional share execution via Alpaca Trading API, appends 
-    execution provenance to US_DIVIDEND_TRADE_AUDIT.csv, supports GARCH/Risk-Parity
-    quantitative optimization inputs, and dispatches telemetry to Telegram.
+    Handles fractional share execution via Alpaca Trading API, logs execution 
+    provenance to US_DIVIDEND_TRADE_AUDIT.csv, supports GARCH/Risk-Parity inputs, 
+    and exports AutomatedRebalancer + DEFAULT_PORTFOLIO_TARGETS at module top-level.
 ===============================================================================
 """
 
@@ -20,13 +20,13 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import MarketOrderRequest
 from alpaca.trading.enums import OrderSide, TimeInForce
 
-# Import Telegram notifier if available, fallback gracefully if not
 try:
     from telegram_notifier import TelegramNotifier
 except ImportError:
     TelegramNotifier = None
 
-# Default target allocations fallback
+__all__ = ["AutomatedRebalancer", "DEFAULT_PORTFOLIO_TARGETS", "execute_alpaca_rebalance"]
+
 DEFAULT_PORTFOLIO_TARGETS = {
     "O": 0.25,     # Realty Income Corp
     "MAIN": 0.20,  # Main Street Capital
@@ -81,8 +81,7 @@ def execute_alpaca_rebalance(
     paper: bool = True
 ) -> Dict:
     """
-    Executes fractional share market orders on Alpaca based on Risk-Parity targets
-    and logs trade provenance to US_DIVIDEND_TRADE_AUDIT.csv.
+    Executes fractional share market orders on Alpaca based on Risk-Parity targets.
     """
     clean_api_key = sanitize(api_key)
     clean_secret_key = sanitize(secret_key)
@@ -93,13 +92,14 @@ def execute_alpaca_rebalance(
         
     client = TradingClient(api_key=clean_api_key, secret_key=clean_secret_key, paper=paper)
     
-    # 1. Compute Quantitative Allocations via src/quant_engine.py
+    # Quantitative Allocation Ingestion
     try:
         from src.quant_engine import run_us_quant_pipeline
         quant_res = run_us_quant_pipeline(capital=capital)
         allocations = quant_res["target_allocations_usd"]
         var_95_usd = quant_res["var_95_usd"]
-    except ImportError:
+    except Exception as e:
+        print(f"⚠️ Quantitative engine fallback triggered: {e}")
         allocations = {sym: capital * weight for sym, weight in DEFAULT_PORTFOLIO_TARGETS.items()}
         var_95_usd = 0.0
     
@@ -111,9 +111,9 @@ def execute_alpaca_rebalance(
         "var_95_usd": var_95_usd
     }
     
-    # 2. Route Fractional Orders to Alpaca
+    # Order Execution Routing
     for symbol, notional_usd in allocations.items():
-        if notional_usd < 1.0: # Minimum $1 order threshold for Alpaca fractional shares
+        if notional_usd < 1.0:
             continue
             
         try:
@@ -127,7 +127,6 @@ def execute_alpaca_rebalance(
             order_id = str(order.id)
             status = str(order.status)
             
-            # Record audit row to CSV
             log_trade_audit_entry(symbol, notional_usd, order_id, status, account_mode)
             
             execution_summary["executed_orders"].append({
@@ -145,7 +144,7 @@ def execute_alpaca_rebalance(
             })
             print(f"❌ Failed Order: {symbol} — {err_msg}")
 
-    # 3. Dispatch Telegram Telemetry Notification
+    # Telegram Telemetry Dispatch
     bot_token = sanitize(os.getenv("TELEGRAM_BOT_TOKEN"))
     chat_id = sanitize(os.getenv("TELEGRAM_CHAT_ID"))
     
@@ -201,4 +200,4 @@ if __name__ == "__main__":
         res = execute_alpaca_rebalance(clean_key, clean_secret, capital=monthly_budget, paper=True)
         print("Execution Result Summary:", res)
     else:
-        print("ℹ️ Missing ALPACA_API_KEY or ALPACA_SECRET_KEY environment variables. Local execution check complete.")
+        print("ℹ️ Missing API key environment variables. Environment check complete.")
