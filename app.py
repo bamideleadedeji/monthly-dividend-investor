@@ -19,27 +19,23 @@ st.set_page_config(page_title="Monthly Dividend Investor Dashboard", page_icon="
 st.title("📈 Monthly Dividend Investor Dashboard")
 st.markdown("Quantitative Risk-Parity Engine | GARCH(1,1) Volatility | Alpaca Order Routing")
 
-# Sidebar Credentials (Isolated Secrets Fallback)
+# Sidebar Credentials
 st.sidebar.header("🔐 Alpaca API Credentials")
 api_key = st.sidebar.text_input("API Key ID", value=os.getenv("ALPACA_API_KEY", ""), type="password")
 secret_key = st.sidebar.text_input("Secret Key", value=os.getenv("ALPACA_SECRET_KEY", ""), type="password")
 paper_mode = st.sidebar.checkbox("Paper Trading Mode", value=True)
 
-# Main Multi-Account Interface Tabs
 tab_paper, tab_live = st.tabs([
     "📊 Paper-Trading Small Account (3-Month Quantitative Test)", 
     "🏛️ Institutional Production Portfolio (Alpaca Account)"
 ])
 
-# =============================================================================
-# TAB 1: PAPER-TRADING QUANTITATIVE ENGINE ($100 MICRO-CAPITAL)
-# =============================================================================
+# TAB 1: Paper-Trading Small Account
 with tab_paper:
     st.subheader("📊 Paper-Trading Small Account & Quantitative Forward Test")
-    st.caption("Runs GARCH(1,1) time-varying volatility estimation and convex Risk-Parity optimization to equalize risk contribution.")
+    st.caption("Runs GARCH(1,1) volatility estimation and convex Risk-Parity optimization to equalize risk contribution.")
     
     col_p1, col_p2 = st.columns([1, 2])
-    
     with col_p1:
         paper_capital = st.number_input("Paper Batch Allocation ($)", min_value=10.0, value=100.0, step=10.0, key="paper_cap_in")
         run_paper = st.button("🚀 Calculate Quantitative Allocations", use_container_width=True)
@@ -72,10 +68,7 @@ with tab_paper:
                 fig_paper = px.pie(df_quant, values="Allocation ($)", names="Ticker", hole=0.4)
                 st.plotly_chart(fig_paper, use_container_width=True)
 
-
-# =============================================================================
-# TAB 2: INSTITUTIONAL PRODUCTION ACCOUNT (ALPACA LIVE / PAPER CLIENT)
-# =============================================================================
+# TAB 2: Institutional Production Account
 with tab_live:
     st.subheader("🏛️ Institutional Alpaca Account Execution")
     
@@ -94,7 +87,6 @@ with tab_live:
             c4.metric("Mode", "Paper" if paper_mode else "LIVE")
 
             st.markdown("---")
-
             left_col, right_col = st.columns([3, 2])
 
             with left_col:
